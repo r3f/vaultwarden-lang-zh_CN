@@ -6,13 +6,13 @@ function smtpTest(event) {
     event.preventDefault();
     event.stopPropagation();
     if (formHasChanges(config_form)) {
-        alert("Config has been changed but not yet saved.\nPlease save the changes first before sending a test email.");
+        alert("配置已更改但尚未保存。\n请在发送测试邮件之前先保存更改。");
         return false;
     }
 
     const test_email = document.getElementById("smtp-test-email");
 
-    // Do a very very basic email address check.
+    // 进行非常基本的电子邮件地址检查。
     if (test_email.value.match(/\S+@\S+/i) === null) {
         test_email.parentElement.classList.add("was-validated");
         return false;
@@ -20,8 +20,8 @@ function smtpTest(event) {
 
     const data = JSON.stringify({ "email": test_email.value });
     _post(`${BASE_URL}/admin/test/smtp`,
-        "SMTP Test email sent correctly",
-        "Error sending SMTP test email",
+        "SMTP 测试邮件已正确发送",
+        "发送 SMTP 测试邮件时出错",
         data, false
     );
 }
@@ -46,8 +46,8 @@ function getFormData() {
 function saveConfig(event) {
     const data = JSON.stringify(getFormData());
     _post(`${BASE_URL}/admin/config`,
-        "Config saved correctly",
-        "Error saving config",
+        "配置已成功保存",
+        "保存配置时出错",
         data
     );
     event.preventDefault();
@@ -57,16 +57,15 @@ function deleteConf(event) {
     event.preventDefault();
     event.stopPropagation();
     const input = prompt(
-        "This will remove all user configurations, and restore the defaults and the " +
-        "values set by the environment. This operation could be dangerous. Type 'DELETE' to proceed:"
+        "这将删除所有用户配置，并恢复默认值和环境设置的值。此操作可能危险。请输入 'DELETE' 以继续:"
     );
     if (input === "DELETE") {
         _post(`${BASE_URL}/admin/config/delete`,
-            "Config deleted correctly",
-            "Error deleting config"
+            "配置已成功删除",
+            "删除配置时出错"
         );
     } else {
-        alert("Wrong input, please try again");
+        alert("输入错误，请重试");
     }
 }
 
@@ -74,17 +73,17 @@ function backupDatabase(event) {
     event.preventDefault();
     event.stopPropagation();
     _post(`${BASE_URL}/admin/config/backup_db`,
-        "Backup created successfully",
-        "Error creating backup", null, false
+        "备份成功创建",
+        "创建备份时出错", null, false
     );
 }
 
-// Two functions to help check if there were changes to the form fields
-// Useful for example during the smtp test to prevent people from clicking save before testing there new settings
+// 两个函数用于帮助检查表单字段是否有更改
+// 例如，在 smtp 测试期间防止用户在测试新设置之前点击保存
 function initChangeDetection(form) {
     const ignore_fields = ["smtp-test-email"];
     Array.from(form).forEach((el) => {
-        if (! ignore_fields.includes(el.id)) {
+        if (!ignore_fields.includes(el.id)) {
             el.dataset.origValue = el.value;
         }
     });
@@ -94,7 +93,7 @@ function formHasChanges(form) {
     return Array.from(form).some(el => "origValue" in el.dataset && ( el.dataset.origValue !== el.value));
 }
 
-// This function will prevent submitting a from when someone presses enter.
+// 防止在按回车键时提交表单的功能
 function preventFormSubmitOnEnter(form) {
     if (form) {
         form.addEventListener("keypress", (event) => {
@@ -105,7 +104,7 @@ function preventFormSubmitOnEnter(form) {
     }
 }
 
-// This function will hook into the smtp-test-email input field and will call the smtpTest() function when enter is pressed.
+// 当按回车键时，此函数将钩入 smtp-test-email 输入字段，并在调用 smtpTest() 函数时调用它。
 function submitTestEmailOnEnter() {
     const smtp_test_email_input = document.getElementById("smtp-test-email");
     if (smtp_test_email_input) {
@@ -118,7 +117,7 @@ function submitTestEmailOnEnter() {
     }
 }
 
-// Colorize some settings which are high risk
+// 着色一些高风险的设置
 function colorRiskSettings() {
     const risk_items = document.getElementsByClassName("col-form-label");
     Array.from(risk_items).forEach((el) => {
@@ -152,19 +151,19 @@ function masterCheck(check_id, inputs_query) {
     const checkbox = document.getElementById(check_id);
     if (checkbox) {
         const onChange = onChanged(checkbox, inputs_query);
-        onChange(); // Trigger the event initially
+        onChange(); // 初始化触发事件
         checkbox.addEventListener("change", onChange);
     }
 }
 
-// This will check if the ADMIN_TOKEN is not a Argon2 hashed value.
-// Else it will show a warning, unless someone has closed it.
-// Then it will not show this warning for 30 days.
+// 这将检查 ADMIN_TOKEN 是否不是 Argon2 哈希值。
+// 否则，它将显示警告，除非有人已经关闭了它。
+// 然后它将在 30 天内不显示此警告。
 function checkAdminToken() {
     const admin_token = document.getElementById("input_admin_token");
     const disable_admin_token = document.getElementById("input_disable_admin_token");
     if (!disable_admin_token.checked && !admin_token.value.startsWith("$argon2")) {
-        // Check if the warning has been closed before and 30 days have passed
+        // 检查警告是否已被关闭，并且已经过了 30 天
         const admin_token_warning_closed = localStorage.getItem("admin_token_warning_closed");
         if (admin_token_warning_closed !== null) {
             const closed_date = new Date(parseInt(admin_token_warning_closed));
@@ -175,30 +174,30 @@ function checkAdminToken() {
             }
         }
 
-        // When closing the alert, store the current date/time in the browser
+        // 在关闭警告时，在浏览器中存储当前日期/时间
         const admin_token_warning = document.getElementById("admin_token_warning");
         admin_token_warning.addEventListener("closed.bs.alert", function() {
             const d = new Date();
             localStorage.setItem("admin_token_warning_closed", d.getTime());
         });
 
-        // Display the warning
+        // 显示警告
         admin_token_warning.classList.remove("d-none");
     }
 }
 
-// This will check for specific configured values, and when needed will show a warning div
+// 检查特定配置值，并在需要时显示警告 div
 function showWarnings() {
     checkAdminToken();
 }
 
 const config_form = document.getElementById("config-form");
 
-// onLoad events
+// 在加载时的事件
 document.addEventListener("DOMContentLoaded", (/*event*/) => {
     initChangeDetection(config_form);
-    // Prevent enter to submitting the form and save the config.
-    // Users need to really click on save, this also to prevent accidental submits.
+    // 防止按回车键提交表单并保存配置。
+    // 用户需要真正点击保存，这也可以防止意外的提交。
     preventFormSubmitOnEnter(config_form);
 
     submitTestEmailOnEnter();

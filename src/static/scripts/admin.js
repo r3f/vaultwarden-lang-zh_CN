@@ -52,10 +52,10 @@ function _post(url, successMsg, errMsg, body, reload_page = true) {
             if (respJson.ErrorModel && respJson.ErrorModel.Message) {
                 return respJson.ErrorModel.Message;
             } else {
-                return Promise.reject({ body: `${respStatus} - ${respStatusText}\n\nUnknown error`, error: true });
+                return Promise.reject({ body: `${respStatus} - ${respStatusText}\n\n未知错误`, error: true });
             }
         } catch (e) {
-            return Promise.reject({ body: `${respStatus} - ${respStatusText}\n\n[Catch] ${e}`, error: true });
+            return Promise.reject({ body: `${respStatus} - ${respStatusText}\n\n[捕获] ${e}`, error: true });
         }
     }).then(apiMsg => {
         msg(`${errMsg}\n${apiMsg}`, reload_page);
@@ -75,12 +75,12 @@ const getPreferredTheme = () => {
         return storedTheme;
     }
 
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "暗" : "亮";
 };
 
 const setTheme = theme => {
-    if (theme === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        document.documentElement.setAttribute("data-bs-theme", "dark");
+    if (theme === "自动" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        document.documentElement.setAttribute("data-bs-theme", "暗");
     } else {
         document.documentElement.setAttribute("data-bs-theme", theme);
     }

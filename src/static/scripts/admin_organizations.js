@@ -9,22 +9,22 @@ function deleteOrganization(event) {
     const org_name = event.target.dataset.vwOrgName;
     const billing_email = event.target.dataset.vwBillingEmail;
     if (!org_uuid) {
-        alert("Required parameters not found!");
+        alert("未找到必需的参数！");
         return false;
     }
 
-    // First make sure the user wants to delete this organization
-    const continueDelete = confirm(`WARNING: All data of this organization (${org_name}) will be lost!\nMake sure you have a backup, this cannot be undone!`);
+    // 首先确保用户想要删除此组织
+    const continueDelete = confirm(`警告：此组织(${org_name})的所有数据将丢失!\n请确保您有备份，此操作无法撤销!`);
     if (continueDelete == true) {
-        const input_org_uuid = prompt(`To delete the organization "${org_name} (${billing_email})", please type the organization uuid below.`);
+        const input_org_uuid = prompt(`要删除组织"${org_name} (${billing_email})"，请在下面输入组织 UUID。`);
         if (input_org_uuid != null) {
             if (input_org_uuid == org_uuid) {
                 _post(`${BASE_URL}/admin/organizations/${org_uuid}/delete`,
-                    "Organization deleted correctly",
-                    "Error deleting organization"
+                    "组织已成功删除",
+                    "删除组织时出错"
                 );
             } else {
-                alert("Wrong organization uuid, please try again");
+                alert("错误的组织 UUID，请重试");
             }
         }
     }
@@ -40,7 +40,7 @@ function initActions() {
     }
 }
 
-// onLoad events
+// 在加载时执行的事件
 document.addEventListener("DOMContentLoaded", (/*event*/) => {
     jQuery("#orgs-table").DataTable({
         "drawCallback": function() {
@@ -50,9 +50,9 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
         "responsive": true,
         "lengthMenu": [
             [-1, 5, 10, 25, 50],
-            ["All", 5, 10, 25, 50]
+            ["全部", 5, 10, 25, 50]
         ],
-        "pageLength": -1, // Default show all
+        "pageLength": -1, // 默认显示所有
         "columnDefs": [{
             "targets": [4,5],
             "searchable": false,
@@ -60,7 +60,7 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
         }]
     });
 
-    // Add click events for organization actions
+    // 为组织操作添加点击事件
     initActions();
 
     const btnReload = document.getElementById("reload");

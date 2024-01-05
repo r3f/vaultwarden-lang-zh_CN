@@ -8,18 +8,18 @@ function deleteUser(event) {
     const id = event.target.parentNode.dataset.vwUserUuid;
     const email = event.target.parentNode.dataset.vwUserEmail;
     if (!id || !email) {
-        alert("Required parameters not found!");
+        alert("未找到必需的参数！");
         return false;
     }
-    const input_email = prompt(`To delete user "${email}", please type the email below`);
+    const input_email = prompt(`要删除用户"${email}"，请在下面输入邮箱`);
     if (input_email != null) {
         if (input_email == email) {
             _post(`${BASE_URL}/admin/users/${id}/delete`,
-                "User deleted correctly",
-                "Error deleting user"
+                "用户已成功删除",
+                "删除用户时出错"
             );
         } else {
-            alert("Wrong email, please try again");
+            alert("错误的邮箱，请重试");
         }
     }
 }
@@ -30,14 +30,14 @@ function remove2fa(event) {
     const id = event.target.parentNode.dataset.vwUserUuid;
     const email = event.target.parentNode.dataset.vwUserEmail;
     if (!id || !email) {
-        alert("Required parameters not found!");
+        alert("未找到必需的参数！");
         return false;
     }
-    const confirmed = confirm(`Are you sure you want to remove 2FA for "${email}"?`);
+    const confirmed = confirm(`您确定要为"${email}"删除两步验证吗？`);
     if (confirmed) {
         _post(`${BASE_URL}/admin/users/${id}/remove-2fa`,
-            "2FA removed correctly",
-            "Error removing 2FA"
+            "2FA已成功移除",
+            "移除2FA时出错"
         );
     }
 }
@@ -48,14 +48,14 @@ function deauthUser(event) {
     const id = event.target.parentNode.dataset.vwUserUuid;
     const email = event.target.parentNode.dataset.vwUserEmail;
     if (!id || !email) {
-        alert("Required parameters not found!");
+        alert("未找到必需的参数！");
         return false;
     }
-    const confirmed = confirm(`Are you sure you want to deauthorize sessions for "${email}"?`);
+    const confirmed = confirm(`您确定要取消授权"${email}"的会话吗？`);
     if (confirmed) {
         _post(`${BASE_URL}/admin/users/${id}/deauth`,
-            "Sessions deauthorized correctly",
-            "Error deauthorizing sessions"
+            "会话已成功取消授权",
+            "取消授权会话时出错"
         );
     }
 }
@@ -66,14 +66,14 @@ function disableUser(event) {
     const id = event.target.parentNode.dataset.vwUserUuid;
     const email = event.target.parentNode.dataset.vwUserEmail;
     if (!id || !email) {
-        alert("Required parameters not found!");
+        alert("未找到必需的参数！");
         return false;
     }
-    const confirmed = confirm(`Are you sure you want to disable user "${email}"? This will also deauthorize their sessions.`);
+    const confirmed = confirm(`您确定要禁用用户"${email}"吗？这也将取消其会话的授权。`);
     if (confirmed) {
         _post(`${BASE_URL}/admin/users/${id}/disable`,
-            "User disabled successfully",
-            "Error disabling user"
+            "用户已成功禁用",
+            "禁用用户时出错"
         );
     }
 }
@@ -84,14 +84,14 @@ function enableUser(event) {
     const id = event.target.parentNode.dataset.vwUserUuid;
     const email = event.target.parentNode.dataset.vwUserEmail;
     if (!id || !email) {
-        alert("Required parameters not found!");
+        alert("未找到必需的参数！");
         return false;
     }
-    const confirmed = confirm(`Are you sure you want to enable user "${email}"?`);
+    const confirmed = confirm(`您确定要启用用户"${email}"吗？`);
     if (confirmed) {
         _post(`${BASE_URL}/admin/users/${id}/enable`,
-            "User enabled successfully",
-            "Error enabling user"
+            "用户已成功启用",
+            "启用用户时出错"
         );
     }
 }
@@ -100,8 +100,8 @@ function updateRevisions(event) {
     event.preventDefault();
     event.stopPropagation();
     _post(`${BASE_URL}/admin/users/update_revision`,
-        "Success, clients will sync next time they connect",
-        "Error forcing clients to sync"
+        "成功，客户端将在下次连接时同步",
+        "强制客户端同步时出错"
     );
 }
 
@@ -114,51 +114,51 @@ function inviteUser(event) {
     });
     email.value = "";
     _post(`${BASE_URL}/admin/invite`,
-        "User invited correctly",
-        "Error inviting user",
+        "用户已成功邀请",
+        "邀请用户时出错",
         data
     );
 }
 
-function resendUserInvite (event) {
+function resendUserInvite(event) {
     event.preventDefault();
     event.stopPropagation();
     const id = event.target.parentNode.dataset.vwUserUuid;
     const email = event.target.parentNode.dataset.vwUserEmail;
     if (!id || !email) {
-        alert("Required parameters not found!");
+        alert("未找到必需的参数！");
         return false;
     }
-    const confirmed = confirm(`Are you sure you want to resend invitation for "${email}"?`);
+    const confirmed = confirm(`您确定要重新发送"${email}"的邀请吗？`);
     if (confirmed) {
         _post(`${BASE_URL}/admin/users/${id}/invite/resend`,
-            "Invite sent successfully",
-            "Error resend invite"
+            "邀请已成功发送",
+            "重新发送邀请时出错"
         );
     }
 }
 
 const ORG_TYPES = {
     "0": {
-        "name": "Owner",
+        "name": "所有者",
         "bg": "orange",
         "font": "black"
     },
     "1": {
-        "name": "Admin",
+        "name": "管理员",
         "bg": "blueviolet"
     },
     "2": {
-        "name": "User",
+        "name": "用户",
         "bg": "blue"
     },
     "3": {
-        "name": "Manager",
+        "name": "经理",
         "bg": "green"
     },
 };
 
-// Special sort function to sort dates in ISO format
+// 用于按 ISO 格式排序日期的特殊排序函数
 jQuery.extend(jQuery.fn.dataTableExt.oSort, {
     "date-iso-pre": function(a) {
         let x;
@@ -187,24 +187,24 @@ jQuery.extend(jQuery.fn.dataTableExt.oSort, {
 });
 
 const userOrgTypeDialog = document.getElementById("userOrgTypeDialog");
-// Fill the form and title
+// 填充表单和标题
 userOrgTypeDialog.addEventListener("show.bs.modal", function(event) {
-    // Get shared values
+    // 获取共享值
     const userEmail = event.relatedTarget.parentNode.dataset.vwUserEmail;
     const userUuid = event.relatedTarget.parentNode.dataset.vwUserUuid;
-    // Get org specific values
+    // 获取组织特定值
     const userOrgType = event.relatedTarget.dataset.vwOrgType;
     const userOrgTypeName = ORG_TYPES[userOrgType]["name"];
     const orgName = event.relatedTarget.dataset.vwOrgName;
     const orgUuid = event.relatedTarget.dataset.vwOrgUuid;
 
-    document.getElementById("userOrgTypeDialogTitle").innerHTML = `<b>Update User Type:</b><br><b>Organization:</b> ${orgName}<br><b>User:</b> ${userEmail}`;
+    document.getElementById("userOrgTypeDialogTitle").innerHTML = `<b>更新用户类型：</b><br><b>组织：</b>${orgName}<br><b>用户：</b>${userEmail}`;
     document.getElementById("userOrgTypeUserUuid").value = userUuid;
     document.getElementById("userOrgTypeOrgUuid").value = orgUuid;
     document.getElementById(`userOrgType${userOrgTypeName}`).checked = true;
 }, false);
 
-// Prevent accidental submission of the form with valid elements after the modal has been hidden.
+// 防止在模态框隐藏后无意中提交带有有效元素的表单。
 userOrgTypeDialog.addEventListener("hide.bs.modal", function() {
     document.getElementById("userOrgTypeDialogTitle").innerHTML = "";
     document.getElementById("userOrgTypeUserUuid").value = "";
@@ -218,14 +218,14 @@ function updateUserOrgType(event) {
     const data = JSON.stringify(Object.fromEntries(new FormData(event.target).entries()));
 
     _post(`${BASE_URL}/admin/users/org_type`,
-        "Updated organization type of the user successfully",
-        "Error updating organization type of the user",
+        "成功更新用户的组织类型",
+        "更新用户组织类型时出错",
         data
     );
 }
 
 function initUserTable() {
-    // Color all the org buttons per type
+    // 根据类型为所有组织按钮着色
     document.querySelectorAll("button[data-vw-org-type]").forEach(function(e) {
         const orgType = ORG_TYPES[e.dataset.vwOrgType];
         e.style.backgroundColor = orgType.bg;
@@ -259,7 +259,7 @@ function initUserTable() {
     }
 }
 
-// onLoad events
+// 在加载时执行的事件
 document.addEventListener("DOMContentLoaded", (/*event*/) => {
     jQuery("#users-table").DataTable({
         "drawCallback": function() {
@@ -269,9 +269,9 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
         "responsive": true,
         "lengthMenu": [
             [-1, 2, 5, 10, 25, 50],
-            ["All", 2, 5, 10, 25, 50]
+            ["全部", 2, 5, 10, 25, 50]
         ],
-        "pageLength": -1, // Default show all
+        "pageLength": -1, // 默认显示所有
         "columnDefs": [{
             "targets": [1, 2],
             "type": "date-iso"
@@ -282,7 +282,7 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
         }]
     });
 
-    // Add click events for user actions
+    // 为用户操作添加点击事件
     initUserTable();
 
     const btnUpdateRevisions = document.getElementById("updateRevisions");
