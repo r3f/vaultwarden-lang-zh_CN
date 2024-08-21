@@ -198,7 +198,8 @@ userOrgTypeDialog.addEventListener("show.bs.modal", function(event) {
     const orgName = event.relatedTarget.dataset.vwOrgName;
     const orgUuid = event.relatedTarget.dataset.vwOrgUuid;
 
-    document.getElementById("userOrgTypeDialogTitle").innerHTML = `<b>更新用户类型：</b><br><b>组织：</b>${orgName}<br><b>用户：</b>${userEmail}`;
+    document.getElementById("userOrgTypeDialogOrgName").textContent = orgName;
+    document.getElementById("userOrgTypeDialogUserEmail").textContent = userEmail;
     document.getElementById("userOrgTypeUserUuid").value = userUuid;
     document.getElementById("userOrgTypeOrgUuid").value = orgUuid;
     document.getElementById(`userOrgType${userOrgTypeName}`).checked = true;
@@ -206,7 +207,8 @@ userOrgTypeDialog.addEventListener("show.bs.modal", function(event) {
 
 // 防止在模态框隐藏后无意中提交带有有效元素的表单。
 userOrgTypeDialog.addEventListener("hide.bs.modal", function() {
-    document.getElementById("userOrgTypeDialogTitle").innerHTML = "";
+    document.getElementById("userOrgTypeDialogOrgName").textContent = "";
+    document.getElementById("userOrgTypeDialogUserEmail").textContent = "";
     document.getElementById("userOrgTypeUserUuid").value = "";
     document.getElementById("userOrgTypeOrgUuid").value = "";
 }, false);

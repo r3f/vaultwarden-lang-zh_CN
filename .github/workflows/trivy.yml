@@ -17,7 +17,7 @@ permissions:
 jobs:
   trivy-scan:
     name: Check
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -25,10 +25,10 @@ jobs:
       actions: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 #v4.1.1
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 #v4.1.7
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@2b6a709cf9c4025c5438138008beaddbb02086f0 # v0.14.0
+        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8 # v0.24.0
         with:
           scan-type: repo
           ignore-unfixed: true
@@ -37,6 +37,6 @@ jobs:
           severity: CRITICAL,HIGH
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@bad341350a2f5616f9e048e51360cedc49181ce8 # v2.22.4
+        uses: github/codeql-action/upload-sarif@2bbafcdd7fbf96243689e764c2f15d9735164f33 # v3.25.10
         with:
           sarif_file: 'trivy-results.sarif'

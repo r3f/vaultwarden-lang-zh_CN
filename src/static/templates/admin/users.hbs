@@ -18,21 +18,21 @@
                     {{#each page_data}}
                     <tr>
                         <td>
-                            <svg width="48" height="48" class="float-start me-2 rounded" data-jdenticon-value="{{Email}}">
+                            <svg width="48" height="48" class="float-start me-2 rounded" data-jdenticon-value="{{email}}">
                             <div class="float-start">
-                                <strong>{{Name}}</strong>
-                                <span class="d-block">{{Email}}</span>
+                                <strong>{{name}}</strong>
+                                <span class="d-block">{{email}}</span>
                                 <span class="d-block">
                                     {{#unless user_enabled}}
                                         <span class="badge bg-danger me-2" title="用户已禁用">已禁用</span>
                                     {{/unless}}
-                                    {{#if TwoFactorEnabled}}
+                                    {{#if twoFactorEnabled}}
                                         <span class="badge bg-success me-2" title="已启用两步验证">2FA</span>
                                     {{/if}}
-                                    {{#case _Status 1}}
+                                    {{#case _status 1}}
                                         <span class="badge bg-warning text-dark me-2" title="用户已邀请">已邀请</span>
                                     {{/case}}
-                                    {{#if EmailVerified}}
+                                    {{#if emailVerified}}
                                         <span class="badge bg-success me-2" title="已验证邮箱">已验证</span>
                                     {{/if}}
                                 </span>
@@ -54,15 +54,15 @@
                             {{/if}}
                         </td>
                         <td>
-                            <div class="overflow-auto vw-org-cell" data-vw-user-email="{{jsesc Email no_quote}}" data-vw-user-uuid="{{jsesc Id no_quote}}">
-                            {{#each Organizations}}
-                            <button class="badge" data-bs-toggle="modal" data-bs-target="#userOrgTypeDialog" data-vw-org-type="{{Type}}" data-vw-org-uuid="{{jsesc Id no_quote}}" data-vw-org-name="{{jsesc Name no_quote}}">{{Name}}</button>
+                            <div class="overflow-auto vw-org-cell" data-vw-user-email="{{email}}" data-vw-user-uuid="{{id}}">
+                            {{#each organizations}}
+                            <button class="badge" data-bs-toggle="modal" data-bs-target="#userOrgTypeDialog" data-vw-org-type="{{type}}" data-vw-org-uuid="{{id}}" data-vw-org-name="{{name}}">{{name}}</button>
                             {{/each}}
                             </div>
                         </td>
                         <td class="text-end px-0 small">
-                            <span data-vw-user-uuid="{{jsesc Id no_quote}}" data-vw-user-email="{{jsesc Email no_quote}}">
-                                {{#if TwoFactorEnabled}}
+                            <span data-vw-user-uuid="{{id}}" data-vw-user-email="{{email}}">
+                                {{#if twoFactorEnabled}}
                                 <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-remove2fa>移除所有两步验证</button><br>
                                 {{/if}}
                                 <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-deauth-user>取消授权会话</button><br>
@@ -72,7 +72,7 @@
                                 {{else}}
                                 <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-enable-user>启用用户</button><br>
                                 {{/if}}
-                                {{#case _Status 1}}
+                                {{#case _status 1}}
                                 <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-resend-user-invite>重新发送邀请</button><br>
                                 {{/case}}
                             </span>
@@ -109,7 +109,9 @@
         <div class="modal-dialog modal-dialog-centered modal-sm">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h6 class="modal-title" id="userOrgTypeDialogTitle"></h6>
+                    <h6 class="modal-title">
+                        <b>Update User Type:</b><br><b>Organization:</b> <span id="userOrgTypeDialogOrgName"></span><br><b>User:</b> <span id="userOrgTypeDialogUserEmail"></span>
+                    </h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <form class="form" id="userOrgTypeForm">
@@ -140,7 +142,7 @@
 </main>
 
 <link rel="stylesheet" href="{{urlpath}}/vw_static/datatables.css" />
-<script src="{{urlpath}}/vw_static/jquery-3.7.0.slim.js"></script>
+<script src="{{urlpath}}/vw_static/jquery-3.7.1.slim.js"></script>
 <script src="{{urlpath}}/vw_static/datatables.js"></script>
 <script src="{{urlpath}}/vw_static/admin_users.js"></script>
-<script src="{{urlpath}}/vw_static/jdenticon.js"></script>
+<script src="{{urlpath}}/vw_static/jdenticon-3.3.0.js"></script>

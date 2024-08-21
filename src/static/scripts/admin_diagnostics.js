@@ -21,7 +21,11 @@ const browserUTC = `${year}-${month}-${day} ${hour}:${minute}:${seconds} UTC`;
 
 // ================================
 // Check if the output is a valid IP
-const isValidIp = value => (/^(?:(?:^|\.)(?:2(?:5[0-5]|[0-4]\d)|1?\d?\d)){4}$/.test(value) ? true : false);
+function isValidIp(ip) {
+    const ipv4Regex = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    const ipv6Regex = /^(?:[a-fA-F0-9]{1,4}:){7}[a-fA-F0-9]{1,4}|((?:[a-fA-F0-9]{1,4}:){1,7}:|:(:[a-fA-F0-9]{1,4}){1,7}|[a-fA-F0-9]{1,4}:((:[a-fA-F0-9]{1,4}){1,6}))$/;
+    return ipv4Regex.test(ip) || ipv6Regex.test(ip);
+}
 
 function checkVersions(platform, installed, latest, commit=null) {
     if (installed === "-" || latest === "-") {
@@ -77,7 +81,7 @@ async function generateSupportString(event, dj) {
     supportString += `* Vaultwarden version: v${dj.current_release}\n`;
     supportString += `* Web-vault version: v${dj.web_vault_version}\n`;
     supportString += `* OS/Arch: ${dj.host_os}/${dj.host_arch}\n`;
-    supportString += `* Running within Docker: ${dj.running_within_docker} (Base: ${dj.docker_base_image})\n`;
+    supportString += `* Running within a container: ${dj.running_within_container} (Base: ${dj.container_base_image})\n`;
     supportString += "* Environment settings overridden: ";
     if (dj.overrides != "") {
         supportString += "true\n";
@@ -113,7 +117,7 @@ async function generateSupportString(event, dj) {
     supportString += `\n**Environment settings which are overridden:** ${dj.overrides}\n`;
     supportString += "\n\n```json\n" + JSON.stringify(configJson, undefined, 2) + "\n```\n</details>\n";
 
-    document.getElementById("support-string").innerText = supportString;
+    document.getElementById("support-string").textContent = supportString;
     document.getElementById("support-string").classList.remove("d-none");
     document.getElementById("copy-support").classList.remove("d-none");
 }
@@ -122,7 +126,7 @@ function copyToClipboard(event) {
     event.preventDefault();
     event.stopPropagation();
 
-    const supportStr = document.getElementById("support-string").innerText;
+    const supportStr = document.getElementById("support-string").textContent;
     const tmpCopyEl = document.createElement("textarea");
 
     tmpCopyEl.setAttribute("id", "copy-support-string");
@@ -179,7 +183,7 @@ function initVersionCheck(dj) {
     }
     checkVersions("server", serverInstalled, serverLatest, serverLatestCommit);
 
-    if (!dj.running_within_docker) {
+    if (!dj.running_within_container) {
         const webInstalled = dj.web_vault_version;
         const webLatest = dj.latest_web_build;
         checkVersions("web", webInstalled, webLatest);
@@ -197,7 +201,7 @@ function checkDns(dns_resolved) {
 
 function init(dj) {
     // Time check
-    document.getElementById("time-browser-string").innerText = browserUTC;
+    document.getElementById("time-browser-string").textContent = browserUTC;
 
     // Check if we were able to fetch a valid NTP Time
     // If so, compare both browser and server with NTP
@@ -213,7 +217,7 @@ function init(dj) {
 
     // Domain check
     const browserURL = location.href.toLowerCase();
-    document.getElementById("domain-browser-string").innerText = browserURL;
+    document.getElementById("domain-browser-string").textContent = browserURL;
     checkDomain(browserURL, dj.admin_url.toLowerCase());
 
     // Version check
@@ -225,7 +229,7 @@ function init(dj) {
 
 // onLoad events
 document.addEventListener("DOMContentLoaded", (event) => {
-    const diag_json = JSON.parse(document.getElementById("diagnostics_json").innerText);
+    const diag_json = JSON.parse(document.getElementById("diagnostics_json").textContent);
     init(diag_json);
 
     const btnGenSupport = document.getElementById("gen-support");

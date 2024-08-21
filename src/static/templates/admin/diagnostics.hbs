@@ -23,12 +23,12 @@
                     {{#if page_data.web_vault_enabled}}
                     <dt class="col-sm-5">已安装 Web 版本
                         <span class="badge bg-success d-none" id="web-success" title="已安装最新版本。">正常</span>
-                        <span class="badge bg-warning d-none" id="web-warning" title="似乎有可用更新。">更新</span>
+                        <span class="badge bg-warning text-dark d-none" id="web-warning" title="似乎有可用更新。">更新</span>
                     </dt>
                     <dd class="col-sm-7">
                         <span id="web-installed">{{page_data.web_vault_version}}</span>
                     </dd>
-                    {{#unless page_data.running_within_docker}}
+                    {{#unless page_data.running_within_container}}
                     <dt class="col-sm-5">最新 Web 版本
                         <span class="badge bg-secondary d-none" id="web-failed" title="无法确定最新版本。">未知</span>
                     </dt>
@@ -59,12 +59,12 @@
                     <dd class="col-sm-7">
                         <span class="d-block"><b>{{ page_data.host_os }} / {{ page_data.host_arch }}</b></span>
                     </dd>
-                    <dt class="col-sm-5">是否在 Docker 中运行</dt>
+                    <dt class="col-sm-5">是否在容器中运行</dt>
                     <dd class="col-sm-7">
-                    {{#if page_data.running_within_docker}}
-                        <span class="d-block"><b>是（基础镜像：{{ page_data.docker_base_image }}）</b></span>
+                    {{#if page_data.running_within_container}}
+                        <span class="d-block"><b>是（基础镜像：{{ page_data.container_base_image }}）</b></span>
                     {{/if}}
-                    {{#unless page_data.running_within_docker}}
+                    {{#unless page_data.running_within_container}}
                         <span class="d-block"><b>否</b></span>
                     {{/unless}}
                     </dd>

@@ -1,5 +1,6 @@
 use std::io::ErrorKind;
 
+use bigdecimal::{BigDecimal, ToPrimitive};
 use serde_json::Value;
 
 use crate::CONFIG;
@@ -13,14 +14,14 @@ db_object! {
         pub id: String,
         pub cipher_uuid: String,
         pub file_name: String, // encrypted
-        pub file_size: i32,
+        pub file_size: i64,
         pub akey: Option<String>,
     }
 }
 
 /// Local methods
 impl Attachment {
-    pub const fn new(id: String, cipher_uuid: String, file_name: String, file_size: i32, akey: Option<String>) -> Self {
+    pub const fn new(id: String, cipher_uuid: String, file_name: String, file_size: i64, akey: Option<String>) -> Self {
         Self {
             id,
             cipher_uuid,
@@ -41,13 +42,13 @@ impl Attachment {
 
     pub fn to_json(&self, host: &str) -> Value {
         json!({
-            "Id": self.id,
-            "Url": self.get_url(host),
-            "FileName": self.file_name,
-            "Size": self.file_size.to_string(),
-            "SizeName": crate::util::get_display_size(self.file_size),
-            "Key": self.akey,
-            "Object": "attachment"
+            "id": self.id,
+            "url": self.get_url(host),
+            "fileName": self.file_name,
+            "size": self.file_size.to_string(),
+            "sizeName": crate::util::get_display_size(self.file_size),
+            "key": self.akey,
+            "object": "attachment"
         })
     }
 }
@@ -94,7 +95,7 @@ impl Attachment {
 
     pub async fn delete(&self, conn: &mut DbConn) -> EmptyResult {
         db_run! { conn: {
-            crate::util::retry(
+            let _: () = crate::util::retry(
                 || diesel::delete(attachments::table.filter(attachments::id.eq(&self.id))).execute(conn),
                 10,
             )
@@ -102,7 +103,7 @@ impl Attachment {
 
             let file_path = &self.get_file_path();
 
-            match crate::util::delete_file(file_path) {
+            match std::fs::remove_file(file_path) {
                 // Ignore "file not found" errors. This can happen when the
                 // upstream caller has already cleaned up the file as part of
                 // its own error handling.
@@ -145,13 +146,18 @@ impl Attachment {
 
     pub async fn size_by_user(user_uuid: &str, conn: &mut DbConn) -> i64 {
         db_run! { conn: {
-            let result: Option<i64> = attachments::table
+            let result: Option<BigDecimal> = attachments::table
                 .left_join(ciphers::table.on(ciphers::uuid.eq(attachments::cipher_uuid)))
                 .filter(ciphers::user_uuid.eq(user_uuid))
                 .select(diesel::dsl::sum(attachments::file_size))
                 .first(conn)
                 .expect("Error loading user attachment total size");
-            result.unwrap_or(0)
+
+            match result.map(|r| r.to_i64()) {
+                Some(Some(r)) => r,
+                Some(None) => i64::MAX,
+                None => 0
+            }
         }}
     }
 
@@ -168,13 +174,18 @@ impl Attachment {
 
     pub async fn size_by_org(org_uuid: &str, conn: &mut DbConn) -> i64 {
         db_run! { conn: {
-            let result: Option<i64> = attachments::table
+            let result: Option<BigDecimal> = attachments::table
                 .left_join(ciphers::table.on(ciphers::uuid.eq(attachments::cipher_uuid)))
                 .filter(ciphers::organization_uuid.eq(org_uuid))
                 .select(diesel::dsl::sum(attachments::file_size))
                 .first(conn)
                 .expect("Error loading user attachment total size");
-            result.unwrap_or(0)
+
+            match result.map(|r| r.to_i64()) {
+                Some(Some(r)) => r,
+                Some(None) => i64::MAX,
+                None => 0
+            }
         }}
     }
 

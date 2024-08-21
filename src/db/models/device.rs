@@ -67,8 +67,8 @@ impl Device {
         }
 
         // Update the expiration of the device and the last update date
-        let time_now = Utc::now().naive_utc();
-        self.updated_at = time_now;
+        let time_now = Utc::now();
+        self.updated_at = time_now.naive_utc();
 
         // ---
         // Disabled these keys to be added to the JWT since they could cause the JWT to get too large
@@ -112,6 +112,14 @@ impl Device {
         };
 
         (encode_jwt(&claims), DEFAULT_VALIDITY.num_seconds())
+    }
+
+    pub fn is_push_device(&self) -> bool {
+        matches!(DeviceType::from_i32(self.atype), DeviceType::Android | DeviceType::Ios)
+    }
+
+    pub fn is_registered(&self) -> bool {
+        self.push_uuid.is_some()
     }
 }
 
@@ -210,6 +218,7 @@ impl Device {
                 .from_db()
         }}
     }
+
     pub async fn find_push_devices_by_user(user_uuid: &str, conn: &mut DbConn) -> Vec<Self> {
         db_run! { conn: {
             devices::table

@@ -170,11 +170,11 @@ pub fn static_files(filename: &str) -> Result<(ContentType, &'static [u8]), Erro
         }
         "bootstrap.css" => Ok((ContentType::CSS, include_bytes!("../static/scripts/bootstrap.css"))),
         "bootstrap.bundle.js" => Ok((ContentType::JavaScript, include_bytes!("../static/scripts/bootstrap.bundle.js"))),
-        "jdenticon.js" => Ok((ContentType::JavaScript, include_bytes!("../static/scripts/jdenticon.js"))),
+        "jdenticon-3.3.0.js" => Ok((ContentType::JavaScript, include_bytes!("../static/scripts/jdenticon-3.3.0.js"))),
         "datatables.js" => Ok((ContentType::JavaScript, include_bytes!("../static/scripts/datatables.js"))),
         "datatables.css" => Ok((ContentType::CSS, include_bytes!("../static/scripts/datatables.css"))),
-        "jquery-3.7.0.slim.js" => {
-            Ok((ContentType::JavaScript, include_bytes!("../static/scripts/jquery-3.7.0.slim.js")))
+        "jquery-3.7.1.slim.js" => {
+            Ok((ContentType::JavaScript, include_bytes!("../static/scripts/jquery-3.7.1.slim.js")))
         }
         _ => err!(format!("Static file not found: {filename}")),
     }

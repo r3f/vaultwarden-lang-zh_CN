@@ -2,6 +2,7 @@
 // Error generator macro
 //
 use crate::db::models::EventType;
+use crate::http_client::CustomHttpClientError;
 use std::error::Error as StdError;
 
 macro_rules! make_error {
@@ -52,7 +53,6 @@ use rocket::error::Error as RocketErr;
 use serde_json::{Error as SerdeErr, Value};
 use std::io::Error as IoErr;
 use std::time::SystemTimeError as TimeErr;
-use tokio_tungstenite::tungstenite::Error as TungstError;
 use webauthn_rs::error::WebauthnError as WebauthnErr;
 use yubico::yubicoerror::YubicoError as YubiErr;
 
@@ -69,6 +69,10 @@ make_error! {
     Empty(Empty):     _no_source, _serialize,
     // Used to represent err! calls
     Simple(String):  _no_source,  _api_error,
+
+    // Used in our custom http client to handle non-global IPs and blocked domains
+    CustomHttpClient(CustomHttpClientError): _has_source, _api_error,
+
     // Used for special return values, like 2FA errors
     Json(Value):     _no_source,  _serialize,
     Db(DieselErr):   _has_source, _api_error,
@@ -91,7 +95,6 @@ make_error! {
 
     DieselCon(DieselConErr): _has_source, _api_error,
     Webauthn(WebauthnErr):   _has_source, _api_error,
-    WebSocket(TungstError):  _has_source, _api_error,
 }
 
 impl std::fmt::Debug for Error {
@@ -181,18 +184,18 @@ fn _serialize(e: &impl serde::Serialize, _msg: &str) -> String {
 
 fn _api_error(_: &impl std::any::Any, msg: &str) -> String {
     let json = json!({
-        "Message": msg,
+        "message": msg,
         "error": "",
         "error_description": "",
-        "ValidationErrors": {"": [ msg ]},
-        "ErrorModel": {
-            "Message": msg,
-            "Object": "error"
+        "validationErrors": {"": [ msg ]},
+        "errorModel": {
+            "message": msg,
+            "object": "error"
         },
-        "ExceptionMessage": null,
-        "ExceptionStackTrace": null,
-        "InnerExceptionMessage": null,
-        "Object": "error"
+        "exceptionMessage": null,
+        "exceptionStackTrace": null,
+        "innerExceptionMessage": null,
+        "object": "error"
     });
     _serialize(&json, "")
 }

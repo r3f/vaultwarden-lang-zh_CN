@@ -1,40 +1,9 @@
-#![forbid(unsafe_code, non_ascii_idents)]
-#![deny(
-    rust_2018_idioms,
-    rust_2021_compatibility,
-    noop_method_call,
-    pointer_structural_match,
-    trivial_casts,
-    trivial_numeric_casts,
-    unused_import_braces,
-    clippy::cast_lossless,
-    clippy::clone_on_ref_ptr,
-    clippy::equatable_if_let,
-    clippy::float_cmp_const,
-    clippy::inefficient_to_string,
-    clippy::iter_on_empty_collections,
-    clippy::iter_on_single_items,
-    clippy::linkedlist,
-    clippy::macro_use_imports,
-    clippy::manual_assert,
-    clippy::manual_instant_elapsed,
-    clippy::manual_string_new,
-    clippy::match_wildcard_for_single_variants,
-    clippy::mem_forget,
-    clippy::string_add_assign,
-    clippy::string_to_string,
-    clippy::unnecessary_join,
-    clippy::unnecessary_self_imports,
-    clippy::unused_async,
-    clippy::verbose_file_reads,
-    clippy::zero_sized_map_values
-)]
 #![cfg_attr(feature = "unstable", feature(ip))]
 // The recursion_limit is mainly triggered by the json!() macro.
 // The more key/value pairs there are the more recursion occurs.
 // We want to keep this as low as possible, but not higher then 128.
 // If you go above 128 it will cause rust-analyzer to fail,
-#![recursion_limit = "103"]
+#![recursion_limit = "200"]
 
 // When enabled use MiMalloc as malloc instead of the default malloc
 #[cfg(feature = "enable_mimalloc")]
@@ -57,6 +26,7 @@ extern crate diesel;
 extern crate diesel_migrations;
 
 use std::{
+    collections::HashMap,
     fs::{canonicalize, create_dir_all},
     panic,
     path::Path,
@@ -78,32 +48,30 @@ mod config;
 mod crypto;
 #[macro_use]
 mod db;
+mod http_client;
 mod mail;
 mod ratelimit;
 mod util;
 
+use crate::api::core::two_factor::duo_oidc::purge_duo_contexts;
 use crate::api::purge_auth_requests;
-use crate::api::WS_ANONYMOUS_SUBSCRIPTIONS;
+use crate::api::{WS_ANONYMOUS_SUBSCRIPTIONS, WS_USERS};
 pub use config::CONFIG;
 pub use error::{Error, MapResult};
 use rocket::data::{Limits, ToByteUnit};
 use std::sync::Arc;
-pub use util::is_running_in_docker;
+pub use util::is_running_in_container;
 
 #[rocket::main]
 async fn main() -> Result<(), Error> {
     parse_args();
     launch_info();
 
-    use log::LevelFilter as LF;
-    let level = LF::from_str(&CONFIG.log_level()).expect("Valid log level");
-    init_logging(level).ok();
-
-    let extra_debug = matches!(level, LF::Trace | LF::Debug);
+    let level = init_logging()?;
 
     check_data_folder().await;
-    check_rsa_keys().unwrap_or_else(|_| {
-        error!("Error creating keys, exiting...");
+    auth::initialize_keys().unwrap_or_else(|e| {
+        error!("Error creating private key '{}'\n{e:?}\nExiting Vaultwarden!", CONFIG.private_rsa_key());
         exit(1);
     });
     check_web_vault();
@@ -117,6 +85,7 @@ async fn main() -> Result<(), Error> {
     schedule_jobs(pool.clone());
     crate::db::models::TwoFactor::migrate_u2f_to_webauthn(&mut pool.get().await.unwrap()).await.unwrap();
 
+    let extra_debug = matches!(level, log::LevelFilter::Trace | log::LevelFilter::Debug);
     launch_rocket(pool, extra_debug).await // Blocks until program termination.
 }
 
@@ -237,10 +206,41 @@ fn launch_info() {
     );
 }
 
-fn init_logging(level: log::LevelFilter) -> Result<(), fern::InitError> {
-    // Depending on the main log level we either want to disable or enable logging for trust-dns.
-    // Else if there are timeouts it will clutter the logs since trust-dns uses warn for this.
-    let trust_dns_level = if level >= log::LevelFilter::Debug {
+fn init_logging() -> Result<log::LevelFilter, Error> {
+    let levels = log::LevelFilter::iter().map(|lvl| lvl.as_str().to_lowercase()).collect::<Vec<String>>().join("|");
+    let log_level_rgx_str = format!("^({levels})((,[^,=]+=({levels}))*)$");
+    let log_level_rgx = regex::Regex::new(&log_level_rgx_str)?;
+    let config_str = CONFIG.log_level().to_lowercase();
+
+    let (level, levels_override) = if let Some(caps) = log_level_rgx.captures(&config_str) {
+        let level = caps
+            .get(1)
+            .and_then(|m| log::LevelFilter::from_str(m.as_str()).ok())
+            .ok_or(Error::new("Failed to parse global log level".to_string(), ""))?;
+
+        let levels_override: Vec<(&str, log::LevelFilter)> = caps
+            .get(2)
+            .map(|m| {
+                m.as_str()
+                    .split(',')
+                    .collect::<Vec<&str>>()
+                    .into_iter()
+                    .flat_map(|s| match s.split('=').collect::<Vec<&str>>()[..] {
+                        [log, lvl_str] => log::LevelFilter::from_str(lvl_str).ok().map(|lvl| (log, lvl)),
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .ok_or(Error::new("Failed to parse overrides".to_string(), ""))?;
+
+        (level, levels_override)
+    } else {
+        err!(format!("LOG_LEVEL should follow the format info,vaultwarden::api::icons=debug, invalid: {config_str}"))
+    };
+
+    // Depending on the main log level we either want to disable or enable logging for hickory.
+    // Else if there are timeouts it will clutter the logs since hickory uses warn for this.
+    let hickory_level = if level >= log::LevelFilter::Debug {
         level
     } else {
         log::LevelFilter::Off
@@ -268,47 +268,61 @@ fn init_logging(level: log::LevelFilter) -> Result<(), fern::InitError> {
         log::LevelFilter::Warn
     };
 
-    let mut logger = fern::Dispatch::new()
-        .level(level)
-        // Hide unknown certificate errors if using self-signed
-        .level_for("rustls::session", log::LevelFilter::Off)
-        // Hide failed to close stream messages
-        .level_for("hyper::server", log::LevelFilter::Warn)
-        // Silence Rocket `_` logs
-        .level_for("_", rocket_underscore_level)
-        .level_for("rocket::response::responder::_", rocket_underscore_level)
-        .level_for("rocket::server::_", rocket_underscore_level)
-        .level_for("vaultwarden::api::admin::_", rocket_underscore_level)
-        .level_for("vaultwarden::api::notifications::_", rocket_underscore_level)
-        // Silence Rocket logs
-        .level_for("rocket::launch", log::LevelFilter::Error)
-        .level_for("rocket::launch_", log::LevelFilter::Error)
-        .level_for("rocket::rocket", log::LevelFilter::Warn)
-        .level_for("rocket::server", log::LevelFilter::Warn)
-        .level_for("rocket::fairing::fairings", log::LevelFilter::Warn)
-        .level_for("rocket::shield::shield", log::LevelFilter::Warn)
-        .level_for("hyper::proto", log::LevelFilter::Off)
-        .level_for("hyper::client", log::LevelFilter::Off)
-        // Filter handlebars logs
-        .level_for("handlebars::render", handlebars_level)
-        // Prevent cookie_store logs
-        .level_for("cookie_store", log::LevelFilter::Off)
-        // Variable level for trust-dns used by reqwest
-        .level_for("trust_dns_resolver::name_server::name_server", trust_dns_level)
-        .level_for("trust_dns_proto::xfer", trust_dns_level)
-        .level_for("diesel_logger", diesel_logger_level)
-        .chain(std::io::stdout());
-
     // Enable smtp debug logging only specifically for smtp when need.
     // This can contain sensitive information we do not want in the default debug/trace logging.
-    if CONFIG.smtp_debug() {
+    let smtp_log_level = if CONFIG.smtp_debug() {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Off
+    };
+
+    let mut default_levels = HashMap::from([
+        // Hide unknown certificate errors if using self-signed
+        ("rustls::session", log::LevelFilter::Off),
+        // Hide failed to close stream messages
+        ("hyper::server", log::LevelFilter::Warn),
+        // Silence Rocket `_` logs
+        ("_", rocket_underscore_level),
+        ("rocket::response::responder::_", rocket_underscore_level),
+        ("rocket::server::_", rocket_underscore_level),
+        ("vaultwarden::api::admin::_", rocket_underscore_level),
+        ("vaultwarden::api::notifications::_", rocket_underscore_level),
+        // Silence Rocket logs
+        ("rocket::launch", log::LevelFilter::Error),
+        ("rocket::launch_", log::LevelFilter::Error),
+        ("rocket::rocket", log::LevelFilter::Warn),
+        ("rocket::server", log::LevelFilter::Warn),
+        ("rocket::fairing::fairings", log::LevelFilter::Warn),
+        ("rocket::shield::shield", log::LevelFilter::Warn),
+        ("hyper::proto", log::LevelFilter::Off),
+        ("hyper::client", log::LevelFilter::Off),
+        // Filter handlebars logs
+        ("handlebars::render", handlebars_level),
+        // Prevent cookie_store logs
+        ("cookie_store", log::LevelFilter::Off),
+        // Variable level for hickory used by reqwest
+        ("hickory_resolver::name_server::name_server", hickory_level),
+        ("hickory_proto::xfer", hickory_level),
+        ("diesel_logger", diesel_logger_level),
+        // SMTP
+        ("lettre::transport::smtp", smtp_log_level),
+    ]);
+
+    for (path, level) in levels_override.into_iter() {
+        let _ = default_levels.insert(path, level);
+    }
+
+    if Some(&log::LevelFilter::Debug) == default_levels.get("lettre::transport::smtp") {
         println!(
             "[WARNING] SMTP Debugging is enabled (SMTP_DEBUG=true). Sensitive information could be disclosed via logs!\n\
              [WARNING] Only enable SMTP_DEBUG during troubleshooting!\n"
         );
-        logger = logger.level_for("lettre::transport::smtp", log::LevelFilter::Debug)
-    } else {
-        logger = logger.level_for("lettre::transport::smtp", log::LevelFilter::Off)
+    }
+
+    let mut logger = fern::Dispatch::new().level(level).chain(std::io::stdout());
+
+    for (path, level) in default_levels {
+        logger = logger.level_for(path.to_string(), level);
     }
 
     if CONFIG.extended_logging() {
@@ -345,7 +359,9 @@ fn init_logging(level: log::LevelFilter) -> Result<(), fern::InitError> {
         }
     }
 
-    logger.apply()?;
+    if let Err(err) = logger.apply() {
+        err!(format!("Failed to activate logger: {err}"))
+    }
 
     // Catch panics and log them instead of default output to StdErr
     panic::set_hook(Box::new(|info| {
@@ -383,7 +399,7 @@ fn init_logging(level: log::LevelFilter) -> Result<(), fern::InitError> {
         }
     }));
 
-    Ok(())
+    Ok(level)
 }
 
 #[cfg(not(windows))]
@@ -415,7 +431,7 @@ async fn check_data_folder() {
     let path = Path::new(data_folder);
     if !path.exists() {
         error!("Data folder '{}' doesn't exist.", data_folder);
-        if is_running_in_docker() {
+        if is_running_in_container() {
             error!("Verify that your data volume is mounted at the correct location.");
         } else {
             error!("Create the data folder and try again.");
@@ -427,9 +443,9 @@ async fn check_data_folder() {
         exit(1);
     }
 
-    if is_running_in_docker()
+    if is_running_in_container()
         && std::env::var("I_REALLY_WANT_VOLATILE_STORAGE").is_err()
-        && !docker_data_folder_is_persistent(data_folder).await
+        && !container_data_folder_is_persistent(data_folder).await
     {
         error!(
             "No persistent volume!\n\
@@ -448,7 +464,7 @@ async fn check_data_folder() {
 /// A none persistent volume in either Docker or Podman is represented by a 64 alphanumerical string.
 /// If we detect this string, we will alert about not having a persistent self defined volume.
 /// This probably means that someone forgot to add `-v /path/to/vaultwarden_data/:/data`
-async fn docker_data_folder_is_persistent(data_folder: &str) -> bool {
+async fn container_data_folder_is_persistent(data_folder: &str) -> bool {
     if let Ok(mountinfo) = File::open("/proc/self/mountinfo").await {
         // Since there can only be one mountpoint to the DATA_FOLDER
         // We do a basic check for this mountpoint surrounded by a space.
@@ -473,31 +489,6 @@ async fn docker_data_folder_is_persistent(data_folder: &str) -> bool {
     // In all other cases, just assume a true.
     // This is just an informative check to try and prevent data loss.
     true
-}
-
-fn check_rsa_keys() -> Result<(), crate::error::Error> {
-    // If the RSA keys don't exist, try to create them
-    let priv_path = CONFIG.private_rsa_key();
-    let pub_path = CONFIG.public_rsa_key();
-
-    if !util::file_exists(&priv_path) {
-        let rsa_key = openssl::rsa::Rsa::generate(2048)?;
-
-        let priv_key = rsa_key.private_key_to_pem()?;
-        crate::util::write_file(&priv_path, &priv_key)?;
-        info!("Private key created correctly.");
-    }
-
-    if !util::file_exists(&pub_path) {
-        let rsa_key = openssl::rsa::Rsa::private_key_from_pem(&std::fs::read(&priv_path)?)?;
-
-        let pub_key = rsa_key.public_key_to_pem()?;
-        crate::util::write_file(&pub_path, &pub_key)?;
-        info!("Public key created correctly.");
-    }
-
-    auth::load_keys();
-    Ok(())
 }
 
 fn check_web_vault() {
@@ -553,7 +544,7 @@ async fn launch_rocket(pool: db::DbPool, extra_debug: bool) -> Result<(), Error>
         .register([basepath, "/api"].concat(), api::core_catchers())
         .register([basepath, "/admin"].concat(), api::admin_catchers())
         .manage(pool)
-        .manage(api::start_notification_server())
+        .manage(Arc::clone(&WS_USERS))
         .manage(Arc::clone(&WS_ANONYMOUS_SUBSCRIPTIONS))
         .attach(util::AppHeaders())
         .attach(util::Cors())
@@ -565,7 +556,7 @@ async fn launch_rocket(pool: db::DbPool, extra_debug: bool) -> Result<(), Error>
 
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.expect("Error setting Ctrl-C handler");
-        info!("Exiting vaultwarden!");
+        info!("Exiting Vaultwarden!");
         CONFIG.shutdown();
     });
 
@@ -633,6 +624,13 @@ fn schedule_jobs(pool: db::DbPool) {
             if !CONFIG.auth_request_purge_schedule().is_empty() {
                 sched.add(Job::new(CONFIG.auth_request_purge_schedule().parse().unwrap(), || {
                     runtime.spawn(purge_auth_requests(pool.clone()));
+                }));
+            }
+
+            // Clean unused, expired Duo authentication contexts.
+            if !CONFIG.duo_context_purge_schedule().is_empty() && CONFIG._enable_duo() && !CONFIG.duo_use_iframe() {
+                sched.add(Job::new(CONFIG.duo_context_purge_schedule().parse().unwrap(), || {
+                    runtime.spawn(purge_duo_contexts(pool.clone()));
                 }));
             }
 

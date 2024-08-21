@@ -12,9 +12,10 @@ use crate::{
         core::{
             accounts::{PreloginData, RegisterData, _prelogin, _register},
             log_user_event,
-            two_factor::{authenticator, duo, email, enforce_2fa_policy, webauthn, yubikey},
+            two_factor::{authenticator, duo, duo_oidc, email, enforce_2fa_policy, webauthn, yubikey},
         },
-        ApiResult, EmptyResult, JsonResult, JsonUpcase,
+        push::register_push_device,
+        ApiResult, EmptyResult, JsonResult,
     },
     auth::{generate_organization_api_key_login_claims, ClientHeaders, ClientIp},
     db::{models::*, DbConn},
@@ -266,6 +267,11 @@ async fn _password_login(
         }
     }
 
+    // register push device
+    if !new_device {
+        register_push_device(&mut device, conn).await?;
+    }
+
     // Common
     // ---
     // Disabled this variable, it was used to generate the JWT
@@ -289,7 +295,12 @@ async fn _password_login(
         "KdfIterations": user.client_kdf_iter,
         "KdfMemory": user.client_kdf_memory,
         "KdfParallelism": user.client_kdf_parallelism,
-        "ResetMasterPassword": false,// TODO: Same as above
+        "ResetMasterPassword": false, // TODO: Same as above
+        "ForcePasswordReset": false,
+        "MasterPasswordPolicy": {
+            "object": "masterPasswordPolicy",
+        },
+
         "scope": scope,
         "unofficialServer": true,
         "UserDecryptionOptions": {
@@ -491,7 +502,9 @@ async fn twofactor_auth(
 
     let twofactor_code = match data.two_factor_token {
         Some(ref code) => code,
-        None => err_json!(_json_err_twofactor(&twofactor_ids, &user.uuid, conn).await?, "2FA token not provided"),
+        None => {
+            err_json!(_json_err_twofactor(&twofactor_ids, &user.uuid, data, conn).await?, "2FA token not provided")
+        }
     };
 
     let selected_twofactor = twofactors.into_iter().find(|tf| tf.atype == selected_id && tf.enabled);
@@ -508,7 +521,23 @@ async fn twofactor_auth(
         Some(TwoFactorType::Webauthn) => webauthn::validate_webauthn_login(&user.uuid, twofactor_code, conn).await?,
         Some(TwoFactorType::YubiKey) => yubikey::validate_yubikey_login(twofactor_code, &selected_data?).await?,
         Some(TwoFactorType::Duo) => {
-            duo::validate_duo_login(data.username.as_ref().unwrap().trim(), twofactor_code, conn).await?
+            match CONFIG.duo_use_iframe() {
+                true => {
+                    // Legacy iframe prompt flow
+                    duo::validate_duo_login(&user.email, twofactor_code, conn).await?
+                }
+                false => {
+                    // OIDC based flow
+                    duo_oidc::validate_duo_login(
+                        &user.email,
+                        twofactor_code,
+                        data.client_id.as_ref().unwrap(),
+                        data.device_identifier.as_ref().unwrap(),
+                        conn,
+                    )
+                    .await?
+                }
+            }
         }
         Some(TwoFactorType::Email) => {
             email::validate_email_code_str(&user.uuid, twofactor_code, &selected_data?, conn).await?
@@ -521,7 +550,7 @@ async fn twofactor_auth(
                 }
                 _ => {
                     err_json!(
-                        _json_err_twofactor(&twofactor_ids, &user.uuid, conn).await?,
+                        _json_err_twofactor(&twofactor_ids, &user.uuid, data, conn).await?,
                         "2FA Remember token not provided"
                     )
                 }
@@ -549,12 +578,20 @@ fn _selected_data(tf: Option<TwoFactor>) -> ApiResult<String> {
     tf.map(|t| t.data).map_res("Two factor doesn't exist")
 }
 
-async fn _json_err_twofactor(providers: &[i32], user_uuid: &str, conn: &mut DbConn) -> ApiResult<Value> {
+async fn _json_err_twofactor(
+    providers: &[i32],
+    user_uuid: &str,
+    data: &ConnectData,
+    conn: &mut DbConn,
+) -> ApiResult<Value> {
     let mut result = json!({
         "error" : "invalid_grant",
         "error_description" : "Two factor required.",
-        "TwoFactorProviders" : providers,
-        "TwoFactorProviders2" : {} // { "0" : null }
+        "TwoFactorProviders" : providers.iter().map(ToString::to_string).collect::<Vec<String>>(),
+        "TwoFactorProviders2" : {}, // { "0" : null }
+        "MasterPasswordPolicy": {
+            "Object": "masterPasswordPolicy"
+        }
     });
 
     for provider in providers {
@@ -574,12 +611,30 @@ async fn _json_err_twofactor(providers: &[i32], user_uuid: &str, conn: &mut DbCo
                     None => err!("User does not exist"),
                 };
 
-                let (signature, host) = duo::generate_duo_signature(&email, conn).await?;
+                match CONFIG.duo_use_iframe() {
+                    true => {
+                        // Legacy iframe prompt flow
+                        let (signature, host) = duo::generate_duo_signature(&email, conn).await?;
+                        result["TwoFactorProviders2"][provider.to_string()] = json!({
+                            "Host": host,
+                            "Signature": signature,
+                        })
+                    }
+                    false => {
+                        // OIDC based flow
+                        let auth_url = duo_oidc::get_duo_auth_url(
+                            &email,
+                            data.client_id.as_ref().unwrap(),
+                            data.device_identifier.as_ref().unwrap(),
+                            conn,
+                        )
+                        .await?;
 
-                result["TwoFactorProviders2"][provider.to_string()] = json!({
-                    "Host": host,
-                    "Signature": signature,
-                });
+                        result["TwoFactorProviders2"][provider.to_string()] = json!({
+                            "AuthUrl": auth_url,
+                        })
+                    }
+                }
             }
 
             Some(tf_type @ TwoFactorType::YubiKey) => {
@@ -591,7 +646,7 @@ async fn _json_err_twofactor(providers: &[i32], user_uuid: &str, conn: &mut DbCo
                 let yubikey_metadata: yubikey::YubikeyMetadata = serde_json::from_str(&twofactor.data)?;
 
                 result["TwoFactorProviders2"][provider.to_string()] = json!({
-                    "Nfc": yubikey_metadata.Nfc,
+                    "Nfc": yubikey_metadata.nfc,
                 })
             }
 
@@ -620,19 +675,18 @@ async fn _json_err_twofactor(providers: &[i32], user_uuid: &str, conn: &mut DbCo
 }
 
 #[post("/accounts/prelogin", data = "<data>")]
-async fn prelogin(data: JsonUpcase<PreloginData>, conn: DbConn) -> Json<Value> {
+async fn prelogin(data: Json<PreloginData>, conn: DbConn) -> Json<Value> {
     _prelogin(data, conn).await
 }
 
 #[post("/accounts/register", data = "<data>")]
-async fn identity_register(data: JsonUpcase<RegisterData>, conn: DbConn) -> JsonResult {
+async fn identity_register(data: Json<RegisterData>, conn: DbConn) -> JsonResult {
     _register(data, conn).await
 }
 
 // https://github.com/bitwarden/jslib/blob/master/common/src/models/request/tokenRequest.ts
 // https://github.com/bitwarden/mobile/blob/master/src/Core/Models/Request/TokenRequest.cs
 #[derive(Debug, Clone, Default, FromForm)]
-#[allow(non_snake_case)]
 struct ConnectData {
     #[field(name = uncased("grant_type"))]
     #[field(name = uncased("granttype"))]
